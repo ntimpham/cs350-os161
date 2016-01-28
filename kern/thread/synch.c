@@ -173,6 +173,9 @@ lock_create(const char *name)
       		return NULL;
       	}
 
+        // Set initial lock-holding thread to NULL
+        lock->lk_thread = NULL;
+
         // Create spinlock
       	spinlock_init(&lock->lk_lock);
 
@@ -190,6 +193,9 @@ lock_destroy(struct lock *lock)
         // Clean up spinlock and wchan
         spinlock_cleanup(&lock->lk_lock);
       	wchan_destroy(lock->lk_wchan);
+
+        // Set lock-holding thread to NULL
+        lock->lk_thread = NULL;
 
         // Free name and lock
         kfree(lock->lk_name);
@@ -229,12 +235,14 @@ lock_release(struct lock *lock)
   // Acquire spinlock
   spinlock_acquire(&lock->lk_lock);
 
-    KASSERT(lock_do_i_hold(lock) );
+    bool lock_do_i_hold_ret = lock_do_i_hold(lock);
+    KASSERT(lock_do_i_hold_ret == true);
     KASSERT(lock->lk_is_locked == true);
+
   // Release lock
+  lock->lk_thread = NULL;
   lock->lk_is_locked = false;
 
-    KASSERT(lock->lk_is_locked == false);
   // Wake up a thread waiting for lock
   wchan_wakeone(lock->lk_wchan);
 
@@ -245,6 +253,7 @@ lock_release(struct lock *lock)
 bool
 lock_do_i_hold(struct lock *lock)
 {
+    KASSERT(lock != NULL);
   // Return true if thread pointers are the same
   return curthread == lock->lk_thread;
 }
@@ -265,7 +274,7 @@ cv_create(const char *name)
         }
 
         cv->cv_name = kstrdup(name);
-        if (cv->cv_name==NULL) {
+        if (cv->cv_name == NULL) {
                 kfree(cv);
                 return NULL;
         }
@@ -294,37 +303,31 @@ cv_destroy(struct cv *cv)
 void
 cv_wait(struct cv *cv, struct lock *lock)
 {
-  //   KASSERT(cv != NULL);
-  //   KASSERT(lock != NULL);
-  //   KASSERT(curthread->t_in_interrupt == false);
-  //   KASSERT(lock_do_i_hold(lock) );
-  // wchan_lock(cv->cv_wchan);
-  // lock_release(lock);
-  // wchan_sleep(cv->cv_wchan);
-  // // Wake up here
-  // lock_acquire(lock);
-  (void) cv;
-  (void) lock;
+    KASSERT(cv != NULL);
+    KASSERT(lock != NULL);
+    KASSERT(curthread->t_in_interrupt == false);
+    KASSERT(lock_do_i_hold(lock) );
+  wchan_lock(cv->cv_wchan);
+  lock_release(lock);
+  wchan_sleep(cv->cv_wchan);
+  // Wake up here
+  lock_acquire(lock);
 }
 
 void
 cv_signal(struct cv *cv, struct lock *lock)
 {
-  //   KASSERT(cv != NULL);
-  //   KASSERT(lock != NULL);
-  //   KASSERT(lock_do_i_hold(lock) );
-  // wchan_wakeone(cv->cv_wchan);
-  (void) cv;
-  (void) lock;
+    KASSERT(cv != NULL);
+    KASSERT(lock != NULL);
+    KASSERT(lock_do_i_hold(lock) );
+  wchan_wakeone(cv->cv_wchan);
 }
 
 void
 cv_broadcast(struct cv *cv, struct lock *lock)
 {
-  //   KASSERT(cv != NULL);
-  //   KASSERT(lock != NULL);
-  //   KASSERT(lock_do_i_hold(lock) );
-  // wchan_wakeall(cv->cv_wchan);
-  (void) cv;
-  (void) lock;
+    KASSERT(cv != NULL);
+    KASSERT(lock != NULL);
+    KASSERT(lock_do_i_hold(lock) );
+  wchan_wakeall(cv->cv_wchan);
 }
