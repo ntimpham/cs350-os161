@@ -73,11 +73,11 @@ void V(struct semaphore *);
  * (should be) made internally.
  */
 struct lock {
-        char *lk_name;
-        volatile struct thread *lk_thread;
-	      struct wchan *lk_wchan;
-	      struct spinlock lk_lock;
-        volatile bool lk_is_locked;
+        char *lk_name; // Name of lock
+        volatile struct thread *lk_thread; // Pointer to thread that holds the lock
+	      struct wchan *lk_wchan; // wchan for threads waiting for lock
+	      struct spinlock lk_lock; // Spinlock to access lock
+        volatile bool lk_is_locked; // State of lock (true if lock is being used)
 };
 
 struct lock *lock_create(const char *name);
@@ -114,8 +114,8 @@ void lock_destroy(struct lock *);
  */
 
 struct cv {
-        char *cv_name;
-        struct wchan *cv_wchan;
+        char *cv_name; // Name of condition variable
+        struct wchan *cv_wchan; // wchan for threads waiting for associated variable
 };
 
 struct cv *cv_create(const char *name);
