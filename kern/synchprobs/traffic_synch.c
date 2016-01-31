@@ -22,11 +22,11 @@
  * replace this with declarations of any synchronization and other variables you need here
  */
 static struct lock *intersectionLock;
-static struct cv *
-  queue_ne, queue_ns, queue_nw, // North source
-  queue_en, queue_es, queue_ew, // East source
-  queue_sn, queue_se, queue_sw, // South source
-  queue_wn, queue_we, queue_ws; // West source
+static struct cv
+  *queue_ne, *queue_ns, *queue_nw, // North source
+  *queue_en, *queue_es, *queue_ew, // East source
+  *queue_sn, *queue_se, *queue_sw, // South source
+  *queue_wn, *queue_we, *queue_ws; // West source
 
 /**
  * Holds the number of cars in the intersection that are blocking a certain direction
@@ -278,18 +278,17 @@ intersection_before_entry(Direction origin, Direction destination)
     KASSERT(intersectionLock != NULL);
   lock_acquire(intersectionLock);
 
-    KASSERT(origin != NULL);
-    KASSERT(destination != NULL);
   /**
    * 1. Check if the path is free
    * 2a. If not, enter queue to wait
    * 2b. If yes, update the paths that will be blocked
+   * 3. Wake up cars that were not blocked
    */
 
   /**
    * North origin
    */
-  if (origin == Direction.north && destination == Direction.east) {
+  if (origin == north && destination == east) {
     while (block_ne > 0) {
         KASSERT(queue_ne != NULL);
       cv_wait(queue_ne, intersectionLock);
@@ -308,8 +307,18 @@ intersection_before_entry(Direction origin, Direction destination)
     block_sw++;
     block_wn++;
     block_we++;
+      KASSERT(queue_ne != NULL);
+      KASSERT(queue_ns != NULL);
+      KASSERT(queue_nw != NULL);
+      KASSERT(queue_en != NULL);
+      KASSERT(queue_ws != NULL);
+    cv_signal(queue_ne, intersectionLock);
+    cv_signal(queue_ns, intersectionLock);
+    cv_signal(queue_nw, intersectionLock);
+    cv_signal(queue_en, intersectionLock);
+    cv_signal(queue_ws, intersectionLock);
   }
-  else if (origin == Direction.north && destination == Direction.south) {
+  else if (origin == north && destination == south) {
     while (block_ns > 0) {
         KASSERT(queue_ns != NULL);
       cv_wait(queue_ns, intersectionLock);
@@ -324,10 +333,22 @@ intersection_before_entry(Direction origin, Direction destination)
     block_ew++;
     block_sw++;
     block_wn++;
-    block_ws++;
     block_we++;
+    block_ws++;
+      KASSERT(queue_ne != NULL);
+      KASSERT(queue_ns != NULL);
+      KASSERT(queue_nw != NULL);
+      KASSERT(queue_en != NULL);
+      KASSERT(queue_sn != NULL);
+      KASSERT(queue_se != NULL);
+    cv_signal(queue_ne, intersectionLock);
+    cv_signal(queue_ns, intersectionLock);
+    cv_signal(queue_nw, intersectionLock);
+    cv_signal(queue_en, intersectionLock);
+    cv_signal(queue_sn, intersectionLock);
+    cv_signal(queue_se, intersectionLock);
   }
-  else if (origin == Direction.north && destination == Direction.west) {
+  else if (origin == north && destination == west) {
     while (block_nw > 0) {
         KASSERT(queue_nw != NULL);
       cv_wait(queue_nw, intersectionLock);
@@ -336,11 +357,31 @@ intersection_before_entry(Direction origin, Direction destination)
       KASSERT(block_sw >= 0);
     block_ew++;
     block_sw++;
+      KASSERT(queue_ne != NULL);
+      KASSERT(queue_ns != NULL);
+      KASSERT(queue_nw != NULL);
+      KASSERT(queue_wn != NULL);
+      KASSERT(queue_es != NULL);
+      KASSERT(queue_sn != NULL);
+      KASSERT(queue_se != NULL);
+      KASSERT(queue_wn != NULL);
+      KASSERT(queue_we != NULL);
+      KASSERT(queue_ws != NULL);
+    cv_signal(queue_ne, intersectionLock);
+    cv_signal(queue_ns, intersectionLock);
+    cv_signal(queue_nw, intersectionLock);
+    cv_signal(queue_en, intersectionLock);
+    cv_signal(queue_es, intersectionLock);
+    cv_signal(queue_sn, intersectionLock);
+    cv_signal(queue_se, intersectionLock);
+    cv_signal(queue_wn, intersectionLock);
+    cv_signal(queue_we, intersectionLock);
+    cv_signal(queue_ws, intersectionLock);
   }
   /**
    * East origin
    */
-  else if (origin == Direction.east && destination == Direction.north) {
+  else if (origin == east && destination == north) {
     while (block_en > 0) {
         KASSERT(queue_en != NULL);
       cv_wait(queue_en, intersectionLock);
@@ -349,8 +390,28 @@ intersection_before_entry(Direction origin, Direction destination)
       KASSERT(block_wn >= 0);
     block_sn++;
     block_wn++;
+      KASSERT(queue_ne != NULL);
+      KASSERT(queue_ns != NULL);
+      KASSERT(queue_nw != NULL);
+      KASSERT(queue_en != NULL);
+      KASSERT(queue_es != NULL);
+      KASSERT(queue_ew != NULL);
+      KASSERT(queue_se != NULL);
+      KASSERT(queue_sw != NULL);
+      KASSERT(queue_we != NULL);
+      KASSERT(queue_ws != NULL);
+    cv_signal(queue_ne, intersectionLock);
+    cv_signal(queue_ns, intersectionLock);
+    cv_signal(queue_nw, intersectionLock);
+    cv_signal(queue_en, intersectionLock);
+    cv_signal(queue_es, intersectionLock);
+    cv_signal(queue_ew, intersectionLock);
+    cv_signal(queue_se, intersectionLock);
+    cv_signal(queue_sw, intersectionLock);
+    cv_signal(queue_we, intersectionLock);
+    cv_signal(queue_ws, intersectionLock);
   }
-  else if (origin == Direction.east && destination == Direction.south) {
+  else if (origin == east && destination == south) {
     while (block_es > 0) {
         KASSERT(queue_es != NULL);
       cv_wait(queue_es, intersectionLock);
@@ -369,8 +430,18 @@ intersection_before_entry(Direction origin, Direction destination)
     block_wn++;
     block_we++;
     block_ws++;
+      KASSERT(queue_nw != NULL);
+      KASSERT(queue_en != NULL);
+      KASSERT(queue_es != NULL);
+      KASSERT(queue_ew != NULL);
+      KASSERT(queue_se != NULL);
+    cv_signal(queue_nw, intersectionLock);
+    cv_signal(queue_en, intersectionLock);
+    cv_signal(queue_es, intersectionLock);
+    cv_signal(queue_ew, intersectionLock);
+    cv_signal(queue_se, intersectionLock);
   }
-  else if (origin == Direction.east && destination == Direction.west) {
+  else if (origin == east && destination == west) {
     while (block_ew > 0) {
         KASSERT(queue_ew != NULL);
       cv_wait(queue_ew, intersectionLock);
@@ -387,11 +458,23 @@ intersection_before_entry(Direction origin, Direction destination)
     block_sn++;
     block_sw++;
     block_wn++;
+      KASSERT(queue_en != NULL);
+      KASSERT(queue_es != NULL);
+      KASSERT(queue_ew != NULL);
+      KASSERT(queue_se != NULL);
+      KASSERT(queue_we != NULL);
+      KASSERT(queue_ws != NULL);
+    cv_signal(queue_en, intersectionLock);
+    cv_signal(queue_es, intersectionLock);
+    cv_signal(queue_ew, intersectionLock);
+    cv_signal(queue_se, intersectionLock);
+    cv_signal(queue_we, intersectionLock);
+    cv_signal(queue_ws, intersectionLock);
   }
   /**
    * South
    */
-  else if (origin == Direction.south && destination == Direction.north) {
+  else if (origin == south && destination == north) {
     while (block_sn > 0) {
         KASSERT(queue_sn != NULL);
       cv_wait(queue_sn, intersectionLock);
@@ -408,8 +491,20 @@ intersection_before_entry(Direction origin, Direction destination)
     block_ew++;
     block_wn++;
     block_we++;
+      KASSERT(queue_ns != NULL);
+      KASSERT(queue_nw != NULL);
+      KASSERT(queue_sn != NULL);
+      KASSERT(queue_se != NULL);
+      KASSERT(queue_sw != NULL);
+      KASSERT(queue_ws != NULL);
+    cv_signal(queue_ns, intersectionLock);
+    cv_signal(queue_nw, intersectionLock);
+    cv_signal(queue_sn, intersectionLock);
+    cv_signal(queue_se, intersectionLock);
+    cv_signal(queue_sw, intersectionLock);
+    cv_signal(queue_ws, intersectionLock);
   }
-  else if (origin == Direction.south && destination == Direction.east) {
+  else if (origin == south && destination == east) {
     while (block_se > 0) {
         KASSERT(queue_se != NULL);
       cv_wait(queue_se, intersectionLock);
@@ -418,8 +513,28 @@ intersection_before_entry(Direction origin, Direction destination)
       KASSERT(block_we >= 0);
     block_ne++;
     block_we++;
+      KASSERT(queue_ns != NULL);
+      KASSERT(queue_nw != NULL);
+      KASSERT(queue_en != NULL);
+      KASSERT(queue_es != NULL);
+      KASSERT(queue_ew != NULL);
+      KASSERT(queue_sn != NULL);
+      KASSERT(queue_se != NULL);
+      KASSERT(queue_sw != NULL);
+      KASSERT(queue_wn != NULL);
+      KASSERT(queue_ws != NULL);
+    cv_signal(queue_ns, intersectionLock);
+    cv_signal(queue_nw, intersectionLock);
+    cv_signal(queue_en, intersectionLock);
+    cv_signal(queue_es, intersectionLock);
+    cv_signal(queue_ew, intersectionLock);
+    cv_signal(queue_sn, intersectionLock);
+    cv_signal(queue_se, intersectionLock);
+    cv_signal(queue_sw, intersectionLock);
+    cv_signal(queue_wn, intersectionLock);
+    cv_signal(queue_ws, intersectionLock);
   }
-  else if (origin == Direction.south && destination == Direction.west) {
+  else if (origin == south && destination == west) {
     while (block_sw > 0) {
         KASSERT(queue_sw != NULL);
       cv_wait(queue_sw, intersectionLock);
@@ -438,11 +553,21 @@ intersection_before_entry(Direction origin, Direction destination)
     block_ew++;
     block_wn++;
     block_we++;
+      KASSERT(queue_en != NULL);
+      KASSERT(queue_sn != NULL);
+      KASSERT(queue_se != NULL);
+      KASSERT(queue_sw != NULL);
+      KASSERT(queue_ws != NULL);
+    cv_signal(queue_en, intersectionLock);
+    cv_signal(queue_sn, intersectionLock);
+    cv_signal(queue_se, intersectionLock);
+    cv_signal(queue_sw, intersectionLock);
+    cv_signal(queue_ws, intersectionLock);
   }
   /**
    * West
    */
-  else if (origin == Direction.west && destination == Direction.north) {
+  else if (origin == west && destination == north) {
     while (block_wn > 0) {
         KASSERT(queue_wn != NULL);
       cv_wait(queue_wn, intersectionLock);
@@ -461,8 +586,18 @@ intersection_before_entry(Direction origin, Direction destination)
     block_ew++;
     block_sn++;
     block_sw++;
+      KASSERT(queue_nw != NULL);
+      KASSERT(queue_se != NULL);
+      KASSERT(queue_wn != NULL);
+      KASSERT(queue_we != NULL);
+      KASSERT(queue_ws != NULL);
+    cv_signal(queue_nw, intersectionLock);
+    cv_signal(queue_se, intersectionLock);
+    cv_signal(queue_wn, intersectionLock);
+    cv_signal(queue_we, intersectionLock);
+    cv_signal(queue_ws, intersectionLock);
   }
-  else if (origin == Direction.west && destination == Direction.east) {
+  else if (origin == west && destination == east) {
     while (block_we > 0) {
         KASSERT(queue_we != NULL);
       cv_wait(queue_we, intersectionLock);
@@ -479,8 +614,20 @@ intersection_before_entry(Direction origin, Direction destination)
     block_sn++;
     block_se++;
     block_sw++;
+      KASSERT(queue_nw != NULL);
+      KASSERT(queue_en != NULL);
+      KASSERT(queue_ew != NULL);
+      KASSERT(queue_wn != NULL);
+      KASSERT(queue_we != NULL);
+      KASSERT(queue_ws != NULL);
+    cv_signal(queue_nw, intersectionLock);
+    cv_signal(queue_en, intersectionLock);
+    cv_signal(queue_ew, intersectionLock);
+    cv_signal(queue_wn, intersectionLock);
+    cv_signal(queue_we, intersectionLock);
+    cv_signal(queue_ws, intersectionLock);
   }
-  else if (origin == Direction.west && destination == Direction.south) {
+  else if (origin == west && destination == south) {
     while (block_ws > 0) {
         KASSERT(queue_ws != NULL);
       cv_wait(queue_ws, intersectionLock);
@@ -489,6 +636,26 @@ intersection_before_entry(Direction origin, Direction destination)
       KASSERT(block_es >= 0);
     block_ns++;
     block_es++;
+      KASSERT(queue_ne != NULL);
+      KASSERT(queue_nw != NULL);
+      KASSERT(queue_en != NULL);
+      KASSERT(queue_ew != NULL);
+      KASSERT(queue_sn != NULL);
+      KASSERT(queue_se != NULL);
+      KASSERT(queue_sw != NULL);
+      KASSERT(queue_wn != NULL);
+      KASSERT(queue_we != NULL);
+      KASSERT(queue_ws != NULL);
+    cv_signal(queue_ne, intersectionLock);
+    cv_signal(queue_nw, intersectionLock);
+    cv_signal(queue_en, intersectionLock);
+    cv_signal(queue_ew, intersectionLock);
+    cv_signal(queue_sn, intersectionLock);
+    cv_signal(queue_se, intersectionLock);
+    cv_signal(queue_sw, intersectionLock);
+    cv_signal(queue_wn, intersectionLock);
+    cv_signal(queue_we, intersectionLock);
+    cv_signal(queue_ws, intersectionLock);
   }
   /**
    * BAD INPUT
@@ -518,8 +685,6 @@ intersection_after_exit(Direction origin, Direction destination)
     KASSERT(intersectionLock != NULL);
   lock_acquire(intersectionLock);
 
-    KASSERT(origin != NULL);
-    KASSERT(destination != NULL);
   /**
    * 1. Update blocked paths
    * 2. Wake up blocked cars
@@ -528,7 +693,7 @@ intersection_after_exit(Direction origin, Direction destination)
   /**
    * North origin
    */
-  if (origin == Direction.north && destination == Direction.east) {
+  if (origin == north && destination == east) {
       KASSERT(block_es > 0);
       KASSERT(block_ew > 0);
       KASSERT(block_sn > 0);
@@ -551,7 +716,7 @@ intersection_after_exit(Direction origin, Direction destination)
     cv_signal(queue_wn, intersectionLock);
     cv_signal(queue_we, intersectionLock);
   }
-  else if (origin == Direction.north && destination == Direction.south) {
+  else if (origin == north && destination == south) {
       KASSERT(block_es > 0);
       KASSERT(block_ew > 0);
       KASSERT(block_sw > 0);
@@ -571,7 +736,7 @@ intersection_after_exit(Direction origin, Direction destination)
     cv_signal(queue_ws, intersectionLock);
     cv_signal(queue_we, intersectionLock);
   }
-  else if (origin == Direction.north && destination == Direction.west) {
+  else if (origin == north && destination == west) {
       KASSERT(block_ew > 0);
       KASSERT(block_sw > 0);
     block_ew--;
@@ -582,7 +747,7 @@ intersection_after_exit(Direction origin, Direction destination)
   /**
    * East origin
    */
-  else if (origin == Direction.east && destination == Direction.north) {
+  else if (origin == east && destination == north) {
       KASSERT(block_sn > 0);
       KASSERT(block_wn > 0);
     block_sn--;
@@ -590,7 +755,7 @@ intersection_after_exit(Direction origin, Direction destination)
     cv_signal(queue_sn, intersectionLock);
     cv_signal(queue_wn, intersectionLock);
   }
-  else if (origin == Direction.east && destination == Direction.south) {
+  else if (origin == east && destination == south) {
       KASSERT(block_ne > 0);
       KASSERT(block_ns > 0);
       KASSERT(block_sn > 0);
@@ -613,7 +778,7 @@ intersection_after_exit(Direction origin, Direction destination)
     cv_signal(queue_we, intersectionLock);
     cv_signal(queue_ws, intersectionLock);
   }
-  else if (origin == Direction.east && destination == Direction.west) {
+  else if (origin == east && destination == west) {
       KASSERT(block_ne > 0);
       KASSERT(block_ns > 0);
       KASSERT(block_nw > 0);
@@ -636,7 +801,7 @@ intersection_after_exit(Direction origin, Direction destination)
   /**
    * South
    */
-  else if (origin == Direction.south && destination == Direction.north) {
+  else if (origin == south && destination == north) {
       KASSERT(block_ne > 0);
       KASSERT(block_en > 0);
       KASSERT(block_es > 0);
@@ -656,7 +821,7 @@ intersection_after_exit(Direction origin, Direction destination)
     cv_signal(queue_wn, intersectionLock);
     cv_signal(queue_we, intersectionLock);
   }
-  else if (origin == Direction.south && destination == Direction.east) {
+  else if (origin == south && destination == east) {
       KASSERT(block_ne > 0);
       KASSERT(block_we > 0);
     block_ne--;
@@ -664,7 +829,7 @@ intersection_after_exit(Direction origin, Direction destination)
     cv_signal(queue_ne, intersectionLock);
     cv_signal(queue_we, intersectionLock);
    }
-   else if (origin == Direction.south && destination == Direction.west) {
+   else if (origin == south && destination == west) {
       KASSERT(block_ne > 0);
       KASSERT(block_ns > 0);
       KASSERT(block_nw > 0);
@@ -690,7 +855,7 @@ intersection_after_exit(Direction origin, Direction destination)
   /**
    * West
    */
-  else if (origin == Direction.west && destination == Direction.north) {
+  else if (origin == west && destination == north) {
       KASSERT(block_ne > 0);
       KASSERT(block_ns > 0);
       KASSERT(block_en > 0);
@@ -713,7 +878,7 @@ intersection_after_exit(Direction origin, Direction destination)
     cv_signal(queue_sn, intersectionLock);
     cv_signal(queue_sw, intersectionLock);
   }
-  else if (origin == Direction.west && destination == Direction.east) {
+  else if (origin == west && destination == east) {
       KASSERT(block_ne > 0);
       KASSERT(block_ns > 0);
       KASSERT(block_es > 0);
@@ -733,7 +898,7 @@ intersection_after_exit(Direction origin, Direction destination)
     cv_signal(queue_se, intersectionLock);
     cv_signal(queue_sw, intersectionLock);
   }
-  else if (origin == Direction.west && destination == Direction.south) {
+  else if (origin == west && destination == south) {
       KASSERT(block_ns > 0);
       KASSERT(block_es > 0);
     block_ns--;
