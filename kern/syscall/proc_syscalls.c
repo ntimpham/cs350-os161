@@ -9,7 +9,6 @@
 #include <thread.h>
 #include <addrspace.h>
 #include <copyinout.h>
-#include "pid_list.h"
 #include "opt-A2.h"
 
   /* this implementation of sys__exit does not do anything with the exit code */
@@ -67,7 +66,7 @@ sys_getpid(pid_t *retval)
 {
 #if OPT_A2
     KASSERT(curproc != NULL);
-  return pid_list_getpid(curproc, retval);
+  return curproc->pid;
 
   /*
   //

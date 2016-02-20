@@ -50,7 +50,7 @@
 #include <vfs.h>
 #include <synch.h>
 #include <kern/fcntl.h>
-#include "pid_list.h"
+#include <proc_table.h>
 #include "opt-A2.h"
 
 /*
@@ -103,6 +103,11 @@ proc_create(const char *name)
 #ifdef UW
 	proc->console = NULL;
 #endif // UW
+
+#if OPT_A2
+	pid_t *retval = &(proc->pid);
+	proc_table_add(proc, retval);
+#endif
 
 	return proc;
 }
@@ -198,9 +203,11 @@ proc_bootstrap(void)
   if (kproc == NULL) {
     panic("proc_create for kproc failed\n");
   }
+
 #if OPT_A2
-	pid_list_init();
+	proc_table_init();
 #endif
+
 #ifdef UW
   proc_count = 0;
   proc_count_mutex = sem_create("proc_count_mutex",1);
