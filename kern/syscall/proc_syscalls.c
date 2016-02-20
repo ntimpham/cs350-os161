@@ -9,6 +9,8 @@
 #include <thread.h>
 #include <addrspace.h>
 #include <copyinout.h>
+#include "pid_list.h"
+#include "opt-A2.h"
 
   /* this implementation of sys__exit does not do anything with the exit code */
   /* this needs to be fixed to get exit() and waitpid() working properly */
@@ -17,6 +19,15 @@ void sys__exit(int exitcode) {
 
   struct addrspace *as;
   struct proc *p = curproc;
+
+#if OPT_A2
+
+  /*
+  //
+  //@@@@@=====@@@@@===== END OF _exit implementation =====@@@@@=====@@@@@
+  //
+   */
+#else
   /* for now, just include this to keep the compiler from complaining about
      an unused variable */
   (void)exitcode;
@@ -42,10 +53,11 @@ void sys__exit(int exitcode) {
   /* if this is the last user process in the system, proc_destroy()
      will wake up the kernel menu thread */
   proc_destroy(p);
-  
+
   thread_exit();
   /* thread_exit() does not return, so we should never get here */
   panic("return from thread_exit in sys_exit\n");
+#endif
 }
 
 
@@ -53,9 +65,20 @@ void sys__exit(int exitcode) {
 int
 sys_getpid(pid_t *retval)
 {
+#if OPT_A2
+    KASSERT(curproc != NULL);
+  return pid_list_getpid(curproc, retval);
+
+  /*
+  //
+  //@@@@@=====@@@@@===== END OF getpid implementation =====@@@@@=====@@@@@
+  //
+   */
+#else
   /* for now, this is just a stub that always returns a PID of 1 */
   /* you need to fix this to make it work properly */
   *retval = 1;
+#endif
   return(0);
 }
 
@@ -70,15 +93,22 @@ sys_waitpid(pid_t pid,
   int exitstatus;
   int result;
 
+#if OPT_A2
+
+  /*
+  //
+  //@@@@@=====@@@@@===== END OF waitpid implementation =====@@@@@=====@@@@@
+  //
+   */
+#else
   /* this is just a stub implementation that always reports an
      exit status of 0, regardless of the actual exit status of
-     the specified process.   
+     the specified process.
      In fact, this will return 0 even if the specified process
      is still running, and even if it never existed in the first place.
 
      Fix this!
   */
-
   if (options != 0) {
     return(EINVAL);
   }
@@ -90,5 +120,5 @@ sys_waitpid(pid_t pid,
   }
   *retval = pid;
   return(0);
+#endif
 }
-
