@@ -105,8 +105,7 @@ proc_create(const char *name)
 #endif // UW
 
 #if OPT_A2
-	pid_t *retval = &(proc->pid);
-	proc_table_add(proc, retval);
+	proc->pid = 0;
 #endif
 
 	return proc;

@@ -66,8 +66,6 @@ struct proc {
 
 #if OPT_A2
 	pid_t pid;
-	struct proc *parent;
-	struct array *children;
 #endif
 
 #ifdef UW

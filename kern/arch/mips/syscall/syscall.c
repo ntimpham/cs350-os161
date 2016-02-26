@@ -35,6 +35,7 @@
 #include <thread.h>
 #include <current.h>
 #include <syscall.h>
+#include "opt-A2.h"
 
 
 /*
@@ -131,7 +132,12 @@ syscall(struct trapframe *tf)
 	  break;
 #endif // UW
 
-	    /* Add stuff here */
+#if OPT_A2
+	case SYS_fork:
+		err = sys_fork(tf,
+					(pid_t *)&retval);
+		break;
+#endif
 
 	default:
 	  kprintf("Unknown syscall %d\n", callno);
@@ -177,7 +183,18 @@ syscall(struct trapframe *tf)
  * Thus, you can trash it and do things another way if you prefer.
  */
 void
-enter_forked_process(struct trapframe *tf)
+enter_forked_process(void *tf, unsigned long filler)
 {
-	(void)tf;
+	(void)filler;
+	// Child thread needs to put the trapframe onto its stack. It needs to modify
+  // the trapframe so that fork returns the correct value (and the userspace
+  // program executes the next instruction)
+	struct trapframe c_tf = *((struct trapframe*) tf);
+	c_tf.tf_v0 = 0; // Return value
+	c_tf.tf_epc += 4; // PC
+
+	kfree(tf);
+
+  // Call mips_usermode in the child to go back to userspace
+	mips_usermode(&c_tf);
 }
