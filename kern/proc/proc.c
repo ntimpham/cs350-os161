@@ -281,6 +281,19 @@ proc_create_runprogram(const char *name)
 	V(proc_count_mutex);
 #endif // UW
 
+#if OPT_A2
+	pid_t pid;
+	lock_acquire(proc_table_lock);
+	int x = proc_table_add(proc, &pid);
+	if (x) {
+		proc_destroy(proc);
+		lock_release(proc_table_lock);
+		return NULL;
+	}
+	lock_release(proc_table_lock);
+	proc->pid = pid;
+#endif
+
 	return proc;
 }
 

@@ -13,10 +13,11 @@ struct proc_table_entry {
   volatile bool isdead; // condition of cv
   volatile int exitcode; // value of cv
   struct cv *exitcode_cv;
-  struct lock *lock;
   struct proc_table_entry *parent;
   struct array *children;
 };
+
+extern struct lock *proc_table_lock;
 
 int proc_table_add(struct proc *proc, pid_t *retval);
 int proc_table_remove(pid_t pid);

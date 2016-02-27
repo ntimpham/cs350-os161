@@ -1,16 +1,17 @@
 #include <types.h>
 #include <kern/errno.h>
 #include <proc.h>
+#include <current.h>
 #include <synch.h>
 #include <proc_table.h>
 #include "array.h"
 #include "opt-A2.h"
 
 static struct array *proc_table; // Key: pid, Val: proc
-static struct lock *proc_table_lock;
+struct lock *proc_table_lock;
 
 // Helper functions
-struct proc_table_entry* entry_create(void);
+int entry_create(struct proc_table_entry **retval);
 void entry_destroy(struct proc_table_entry *entry);
 
 /**
@@ -24,7 +25,8 @@ int proc_table_add(struct proc *proc, pid_t *retval) {
 
     KASSERT(proc_table != NULL);
     KASSERT(proc_table_lock != NULL);
-  lock_acquire(proc_table_lock);
+    bool iholdlock = lock_do_i_hold(proc_table_lock);
+    KASSERT(iholdlock == true);
 
   pid_t pid = 0;
   pid_t freepid = 0;
@@ -35,9 +37,7 @@ int proc_table_add(struct proc *proc, pid_t *retval) {
       freepid = i;
     }
     else if (ret->proc == proc) {
-      lock_acquire(ret->lock);
       pid = i;
-      lock_release(ret->lock);
     }
   }
 
@@ -45,32 +45,28 @@ int proc_table_add(struct proc *proc, pid_t *retval) {
   if (pid == 0) {
     struct proc_table_entry *entry;
 
-    entry = entry_create();
-    if (entry == NULL) {
-      lock_release(proc_table_lock);
-      return ENOMEM;
+    int x = entry_create(&entry);
+    if (x) {
+      return x;
     }
 
     if (freepid != 0) {
       pid = freepid;
-      entry->proc = proc;
-      entry->pid = pid;
-
       array_set(proc_table, pid, entry);
     }
     else {
-      int y = array_add(proc_table, entry, (unsigned*)&pid);
-      if (y) {
-        lock_release(proc_table_lock);
-        return y;
+      x = array_add(proc_table, entry, (unsigned*)&pid);
+      if (x) {
+        return x;
       }
     }
+    entry->proc = proc;
+    entry->pid = pid;
   }
 
   // Set return value if included
   if (retval != NULL) *retval = pid;
 
-  lock_release(proc_table_lock);
   return 0; // Success
 }
 
@@ -86,12 +82,12 @@ int proc_table_remove(pid_t pid) {
 
     KASSERT(proc_table != NULL);
     KASSERT(proc_table_lock != NULL);
-  lock_acquire(proc_table_lock);
+    bool iholdlock = lock_do_i_hold(proc_table_lock);
+    KASSERT(iholdlock == true);
 
   entry_destroy(array_get(proc_table, pid) );
   array_set(proc_table, pid, NULL);
 
-  lock_release(proc_table_lock);
   return 0; // Success
 }
 
@@ -99,7 +95,7 @@ int proc_table_remove(pid_t pid) {
  * gets the proc_table_entry of the given process
  * @param  pid    process id of entry to get
  * @param  retval destination to store entry
- * @return        0 success, -1 error
+ * @return        error code
  */
 int proc_table_get(pid_t pid, struct proc_table_entry **retval) {
   if (pid <= 0 || (unsigned)pid >= array_num(proc_table)) {
@@ -108,16 +104,15 @@ int proc_table_get(pid_t pid, struct proc_table_entry **retval) {
 
     KASSERT(proc_table != NULL);
     KASSERT(proc_table_lock != NULL);
-  lock_acquire(proc_table_lock);
+    bool iholdlock = lock_do_i_hold(proc_table_lock);
+    KASSERT(iholdlock == true);
 
   struct proc_table_entry *entry = array_get(proc_table, pid);
   if (entry == NULL) {
-    lock_release(proc_table_lock);
     return ESRCH; // process not found
   }
   *retval = entry;
 
-  lock_release(proc_table_lock);
   return 0; // Success
 }
 
@@ -133,6 +128,10 @@ void proc_table_init(void) {
   // Set index 0 of pid_list to NULL
   int x = array_setsize(proc_table, 1);
   if (x != 0) {
+    unsigned size = array_num(proc_table);
+    for (unsigned i = 0; i < size; i++) {
+      array_remove(proc_table, 0);
+    }
     array_destroy(proc_table);
     panic(x + ": array_setsize for proc_table_init failed\n");
   }
@@ -140,6 +139,10 @@ void proc_table_init(void) {
   // Initilize proc_table_lock
   proc_table_lock = lock_create("proc_table_lock");
   if (proc_table_lock == NULL) {
+    unsigned size = array_num(proc_table);
+    for (unsigned i = 0; i < size; i++) {
+      array_remove(proc_table, 0);
+    }
     array_destroy(proc_table);
     panic("lock_create for proc_table_init failed\n");
   }
@@ -152,6 +155,10 @@ void proc_table_destroy(void) {
   for (unsigned i = 0; i < array_num(proc_table); i++) {
     entry_destroy(array_get(proc_table, i) );
   }
+  unsigned size = array_num(proc_table);
+  for (unsigned i = 0; i < size; i++) {
+    array_remove(proc_table, 0);
+  }
   array_destroy(proc_table);
   lock_destroy(proc_table_lock);
 }
@@ -160,11 +167,15 @@ void proc_table_destroy(void) {
  * creates a new blank proc_table_entry
  * @return new blank proc_table_entry
  */
-struct proc_table_entry *entry_create(void) {
+int entry_create(struct proc_table_entry **retval) {
+  if (retval == NULL) {
+    return EINVAL;
+  }
+
   struct proc_table_entry *entry;
 
-  kmalloc(sizeof(*entry));
-  if (entry == NULL) return NULL;
+  entry = kmalloc(sizeof(*entry));
+  if (entry == NULL) return ENOMEM;
 
   entry->proc = NULL;
   entry->pid = 0;
@@ -175,27 +186,20 @@ struct proc_table_entry *entry_create(void) {
   entry->exitcode_cv = cv_create("proc_table_entry_cv");
   if (entry->exitcode_cv == NULL) {
     kfree(entry);
-    return NULL;
-  }
-
-  entry->lock = lock_create("proc_table_entry_lock");
-  if (entry->lock == NULL) {
-    cv_destroy(entry->exitcode_cv);
-    kfree(entry);
-    return NULL;
+    return ENOMEM;
   }
 
   entry->parent = NULL;
 
   entry->children = array_create();
   if (entry->children == NULL) {
-    lock_destroy(entry->lock);
     cv_destroy(entry->exitcode_cv);
     kfree(entry);
-    return NULL;
+    return ENOMEM;
   }
 
-  return entry;
+  *retval = entry;
+  return 0; // Success
 }
 
 /**
@@ -205,7 +209,10 @@ struct proc_table_entry *entry_create(void) {
 void entry_destroy(struct proc_table_entry *entry) {
   if (entry != NULL) {
     cv_destroy(entry->exitcode_cv);
-    lock_destroy(entry->lock);
+    unsigned size = array_num(entry->children);
+    for (unsigned i = 0; i < size; i++) {
+      array_remove(entry->children, 0);
+    }
     array_destroy(entry->children);
     kfree(entry);
   }
