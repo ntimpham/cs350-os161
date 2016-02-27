@@ -282,15 +282,17 @@ proc_create_runprogram(const char *name)
 #endif // UW
 
 #if OPT_A2
+	proc_table_lock_acquire();
 	pid_t pid;
-	lock_acquire(proc_table_lock);
 	int x = proc_table_add(proc, &pid);
 	if (x) {
+		proc_table_lock_release();
 		proc_destroy(proc);
-		lock_release(proc_table_lock);
 		return NULL;
 	}
-	lock_release(proc_table_lock);
+	proc_table_lock_release();
+
+	  KASSERT(pid > 0);
 	proc->pid = pid;
 #endif
 

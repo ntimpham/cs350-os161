@@ -45,34 +45,40 @@ sys_fork(struct trapframe *tf,
   child->p_addrspace = c_as;
 
   // Create the parent/child relationship
-    KASSERT(proc_table_lock != NULL);
-  lock_acquire(proc_table_lock);
+  proc_table_lock_acquire();
 
   struct proc_table_entry *c_entry;
   proc_table_get(child->pid, &c_entry);
-  proc_table_get(parent->pid, &(c_entry->parent) );
-  (c_entry->numref)++;
-
+    KASSERT(c_entry != NULL);
+    KASSERT(c_entry->proc == child);
+    KASSERT(c_entry->pid == child->pid);
   struct proc_table_entry *p_entry;
   proc_table_get(parent->pid, &p_entry);
-  x = array_add(p_entry->children, c_entry, NULL);
+    KASSERT(p_entry != NULL);
+    KASSERT(p_entry->proc == parent);
+    KASSERT(p_entry->pid == parent->pid);
+
+  c_entry->parent = p_entry;
+  c_entry->numref++;
+
+  x = array_add((struct array*)p_entry->children, c_entry, NULL);
   if (x) {
     proc_table_remove(child->pid);
+    proc_table_lock_release();
     as_destroy(c_as);
     proc_destroy(child);
-    lock_release(proc_table_lock);
     return x;
   }
-  (p_entry->numref)++;
+  p_entry->numref++;
 
   // Create thread for child process (need a safe way to pass the trapframe to
   // the child thread).
   struct trapframe *c_tf = kmalloc(sizeof(struct trapframe) );
   if (c_tf == NULL) {
     proc_table_remove(child->pid);
+    proc_table_lock_release();
     as_destroy(c_as);
     proc_destroy(child);
-    lock_release(proc_table_lock);
     return ENOMEM;
   }
   *c_tf = *tf;
@@ -80,13 +86,14 @@ sys_fork(struct trapframe *tf,
   if (x) {
     kfree(c_tf);
     proc_table_remove(child->pid);
+    proc_table_lock_release();
     as_destroy(c_as);
     proc_destroy(child);
-    lock_release(proc_table_lock);
     return x;
   }
 
-  lock_release(proc_table_lock);
+  proc_table_lock_release();
+
   *retval = child->pid;
   return 0; // Success
 }
@@ -103,18 +110,16 @@ void sys__exit(int exitcode) {
 #if OPT_A2
   DEBUG(DB_SYSCALL,"Syscall: _exit(%d)\n",exitcode);
 
+  proc_table_lock_acquire();
+
   struct proc_table_entry *entry;
-
-    KASSERT(proc_table_lock != NULL);
-  lock_acquire(proc_table_lock);
-
   proc_table_get(p->pid, &entry);
     KASSERT(entry != NULL);
     KASSERT(p == entry->proc);
     KASSERT(p->pid == entry->pid);
 
   // Parent update
-  struct proc_table_entry *pe = entry->parent;
+  struct proc_table_entry *pe = (struct proc_table_entry*)entry->parent;
   if (pe != NULL) {
       KASSERT(pe->numref > 0);
     pe->numref--;
@@ -126,29 +131,29 @@ void sys__exit(int exitcode) {
   }
 
   // Children update
-  struct array *c = entry->children;
-  for (unsigned i = 0; i < array_num(c); i++) {
-    struct proc_table_entry *centry = array_get(c, i);
-      KASSERT(centry != NULL);
-      KASSERT(centry->numref > 0);
-    centry->numref--;
+  struct array *ca = (struct array*)entry->children;
+  for (unsigned i = 0; i < array_num(ca); i++) {
+    struct proc_table_entry *ce = array_get(ca, i);
+      KASSERT(ce != NULL);
+      KASSERT(ce->numref > 0);
+    ce->numref--;
 
     // Check cleanup
-    if (centry->isdead && centry->numref == 0) {
-      proc_table_remove(centry->pid);
+    if (ce->isdead && ce->numref == 0) {
+      proc_table_remove(ce->pid);
     }
   }
 
-  // Self cleanup
+  // Self update
+  entry->isdead = true;
+  entry->exitcode = exitcode;
+  proc_table_broadcastfor(p->pid);
+  // Check cleanup
   if (entry->numref == 0) {
-    proc_table_remove(p->pid);
+    proc_table_remove(entry->pid);
   }
-  else {
-    entry->isdead = true;
-    entry->exitcode = exitcode;
-    cv_broadcast(entry->exitcode_cv, proc_table_lock);
-    lock_release(proc_table_lock);
-  }
+
+  proc_table_lock_release();
 
   // Cleanup process
     KASSERT(curproc->p_addrspace != NULL);
@@ -243,35 +248,30 @@ sys_waitpid(pid_t pid,
     return EINVAL;
   }
 
-  struct proc_table_entry *entry;
+  proc_table_lock_acquire();
 
-    KASSERT(proc_table_lock != NULL);
-  lock_acquire(proc_table_lock);
+  struct proc_table_entry *ce;
+  int x = proc_table_get(pid, &ce);
+  if (x) return x;
 
-  int x = proc_table_get(pid, &entry);
+    KASSERT(ce != NULL);
+    KASSERT(ce->pid == pid);
+
+  // Check if parent
+  if (curproc->pid != ce->parent->pid) return ECHILD;
+
+  x = proc_table_waiton(pid);
   if (x) {
-    lock_release(proc_table_lock);
+    proc_table_lock_release();
     return x;
   }
 
-    KASSERT(entry != NULL);
-    KASSERT(entry->pid == pid);
-
-  // Check if parent
-  if (curproc->pid != entry->parent->pid) {
-    lock_release(proc_table_lock);
-    return ECHILD;
-  }
-
-  while (!entry->isdead) {
-    cv_wait(entry->exitcode_cv, proc_table_lock);
-  }
   // encode and set status
-  exitstatus = _MKWAIT_EXIT(entry->exitcode);
+  exitstatus = _MKWAIT_EXIT(ce->exitcode);
+
+  proc_table_lock_release();
+
   result = copyout((void *)&exitstatus,status,sizeof(int));
-
-  lock_release(proc_table_lock);
-
   if (result) return result;
 
   *retval = pid;
