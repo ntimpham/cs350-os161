@@ -1,5 +1,6 @@
 #include <types.h>
 #include <kern/errno.h>
+#include <kern/fcntl.h>
 #include <kern/unistd.h>
 #include <kern/wait.h>
 #include <lib.h>
@@ -11,6 +12,8 @@
 #include <copyinout.h>
 #include <proc_table.h>
 #include <machine/trapframe.h>
+#include <vfs.h>
+#include <limits.h>
 #include "array.h"
 #include "opt-A2.h"
 
@@ -304,3 +307,92 @@ sys_waitpid(pid_t pid,
   return(0);
 #endif
 }
+
+#if OPT_A2
+int
+sys_execv(const char *program,
+      char **args)
+{
+  char* kprog;
+  size_t kprog_len;
+  struct addrspace *as, *old_as;
+	struct vnode *v;
+	vaddr_t entrypoint, stackptr;
+	int result;
+
+  (void)args;
+
+  /* Copy the program path into the kernel */
+  kprog = kmalloc((PATH_MAX + 1) * sizeof(char));
+  if (kprog == NULL) {
+    return ENOMEM;
+  }
+  result = copyinstr((userptr_t)program, kprog, PATH_MAX+1, &kprog_len);
+  if (result) {
+    kfree(kprog);
+    return result;
+  }
+
+  /* Open the file. */
+	result = vfs_open(kprog, O_RDONLY, 0, &v);
+	if (result) {
+    kfree(kprog);
+		return result;
+	}
+
+  /* Save old address space */
+  old_as = curproc_getas();
+
+	/* Create a new address space. */
+	as = as_create();
+	if (as == NULL) {
+		vfs_close(v);
+    kfree(kprog);
+		return ENOMEM;
+	}
+
+	/* Switch to it and activate it. */
+	curproc_setas(as);
+	as_activate();
+
+	/* Load the executable. */
+	result = load_elf(v, &entrypoint);
+	if (result) {
+		curproc_setas(old_as);
+    as_destroy(as);
+		vfs_close(v);
+    kfree(kprog);
+		return result;
+	}
+
+	/* Done with the file now. */
+	vfs_close(v);
+
+	/* Define the user stack in the address space */
+	result = as_define_stack(as, &stackptr);
+	if (result) {
+    curproc_setas(old_as);
+    as_destroy(as);
+    kfree(kprog);
+		return result;
+	}
+
+  /* Copy arguments into user stack */
+
+  /* Delete old address space */
+  as_destroy(old_as);
+
+	/* Warp to user mode. */
+	enter_new_process(0 /*argc*/, NULL /*userspace addr of argv*/,
+			  stackptr, entrypoint);
+
+	/* enter_new_process does not return. */
+	panic("enter_new_process returned\n");
+	return EINVAL;
+}
+/*
+//
+//@@@@@=====@@@@@===== END OF execv implementation =====@@@@@=====@@@@@
+//
+ */
+#endif
