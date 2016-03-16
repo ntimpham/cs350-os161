@@ -35,6 +35,7 @@
  * functions.
  */
 
+#include "opt-A2.h"
 
 /* This is only actually available if OPT_SYNCHPROBS is set. */
 int whalemating(int, char **);
@@ -82,7 +83,11 @@ int mallocstress(int, char **);
 int nettest(int, char **);
 
 /* Routine for running a user-level program. */
+#if OPT_A2
+int runprogram(char *progname, char **args);
+#else
 int runprogram(char *progname);
+#endif
 
 /* Kernel menu system. */
 void menu(char *argstr);
