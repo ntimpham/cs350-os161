@@ -121,8 +121,12 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 
 	switch (faulttype) {
 	    case VM_FAULT_READONLY:
+#if OPT_A3
+		return VM_FAULT_READONLY;
+#else
 		/* We always create pages read-write, so we can't get this */
 		panic("dumbvm: got VM_FAULT_READONLY\n");
+#endif
 	    case VM_FAULT_READ:
 	    case VM_FAULT_WRITE:
 		break;
@@ -189,12 +193,17 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	spl = splhigh();
 
 #if OPT_A3
-	const uint32_t new_ehi = faultaddress;
-	const uint32_t new_elo = paddr | TLBLO_DIRTY | TLBLO_VALID;
+	uint32_t new_ehi = faultaddress;
+	uint32_t new_elo = paddr | TLBLO_DIRTY | TLBLO_VALID;
 
-	for (i=0; i<NUM_TLB; i++) {
+	if ((vbase1 <= faultaddress && vtop1 >= faultaddress)
+			&& as->as_loadelfdone) {
+		new_elo &= ~TLBLO_DIRTY;
+	}
+
+	for (i = 0; i < NUM_TLB; i++) {
 		tlb_read(&ehi, &elo, i);
-		/* Entry for faultaddr already exists, use it */
+		/* Entry for faultaddress already exists, use it */
 		if (ehi == new_ehi) {
 			tlb_write(new_ehi, new_elo, i);
 			splx(spl);
@@ -249,6 +258,10 @@ as_create(void)
 	as->as_pbase2 = 0;
 	as->as_npages2 = 0;
 	as->as_stackpbase = 0;
+
+#if OPT_A3
+	as->as_loadelfdone = false;
+#endif
 
 	return as;
 }
