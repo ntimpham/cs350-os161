@@ -54,125 +54,125 @@
  *
  * Calls vfs_open on progname and thus may destroy it.
  */
-#if OPT_A2
-int
-runprogram(char *progname, char **args)
-{
-  size_t args_len; // includes null
-
-  struct addrspace *as;
-	struct vnode *v;
-	vaddr_t entrypoint, stackptr;
-	int result;
-
-  if (progname == NULL || args == NULL ) {
-		return EFAULT;
-	}
-
-  /* Count the number of arguments */
-  args_len = 0;
-  while (true) {
-    char *s = args[args_len];
-    args_len++;
-    if (s == NULL) break;
-  }
-
-	/* Count argument length */
-	size_t sumofbytes = 0;
-  for (size_t i = 0; i < args_len-1; i++) {
-    size_t len = 0;
-		for (size_t j = 0; j <= PATH_MAX; j++) {
-			if (j == PATH_MAX) return E2BIG;
-			sumofbytes += sizeof(char);
-			if (args[i][j] == '\0') break;
-		}
-    sumofbytes += len * sizeof(char);
-    if (sumofbytes > ARG_MAX) return E2BIG;
-  }
-
-	/* Open the file. */
-	result = vfs_open(progname, O_RDONLY, 0, &v);
-	if (result) {
-		return result;
-	}
-
-	/* We should be a new process. */
-	KASSERT(curproc_getas() == NULL);
-
-	/* Create a new address space. */
-	as = as_create();
-	if (as ==NULL) {
-		vfs_close(v);
-		return ENOMEM;
-	}
-
-	/* Switch to it and activate it. */
-	curproc_setas(as);
-	as_activate();
-
-	/* Load the executable. */
-	result = load_elf(v, &entrypoint);
-	if (result) {
-		/* p_addrspace will go away when curproc is destroyed */
-		vfs_close(v);
-		return result;
-	}
-
-	/* Done with the file now. */
-	vfs_close(v);
-
-	/* Define the user stack in the address space */
-	result = as_define_stack(as, &stackptr);
-	if (result) {
-		/* p_addrspace will go away when curproc is destroyed */
-		return result;
-	}
-
-	/* Copy arguments into user stack */
-  char* argsptr[args_len];
-  for (size_t j = 0; j < args_len-1; j++) {
-    size_t i = args_len - 2 - j;
-    size_t len = strlen(args[i]) + 1;
-    stackptr -= ROUNDUP(len * sizeof(char), 8);
-    argsptr[j] = (char*)stackptr;
-    result = copyoutstr(args[i], (userptr_t)stackptr, PATH_MAX, &len);
-    if (result) break;
-  }
-  if (result) {
-    return result;
-  }
-    KASSERT(stackptr % 8 == 0);
-  /* Copy argv into user stack */
-  for (size_t i = 0; i < args_len; i++) {
-    stackptr -= sizeof(char*);
-    char *s;
-    if (i == 0) {
-      s = NULL;
-    }
-    else {
-      s = argsptr[i-1];
-    }
-    result = copyout(&s, (userptr_t)stackptr, sizeof(char*));
-    if (result) break;
-  }
-  if (result) {
-    return result;
-  }
-
-	/* Warp to user mode. */
-	enter_new_process(args_len-1 /*argc*/, (userptr_t)stackptr /*userspace addr of argv*/,
-			  stackptr, entrypoint);
-
-	/* enter_new_process does not return. */
-	panic("enter_new_process returned\n");
-	return EINVAL;
-}
-/**
- *
- *	================ END OF RUNPROGRAM WITH ARGUMENTS
- *
- */
-#else
+// #if OPT_A2
+// int
+// runprogram(char *progname, char **args)
+// {
+//   size_t args_len; // includes null
+//
+//   struct addrspace *as;
+// 	struct vnode *v;
+// 	vaddr_t entrypoint, stackptr;
+// 	int result;
+//
+//   if (progname == NULL || args == NULL ) {
+// 		return EFAULT;
+// 	}
+//
+//   /* Count the number of arguments */
+//   args_len = 0;
+//   while (true) {
+//     char *s = args[args_len];
+//     args_len++;
+//     if (s == NULL) break;
+//   }
+//
+// 	/* Count argument length */
+// 	size_t sumofbytes = 0;
+//   for (size_t i = 0; i < args_len-1; i++) {
+//     size_t len = 0;
+// 		for (size_t j = 0; j <= PATH_MAX; j++) {
+// 			if (j == PATH_MAX) return E2BIG;
+// 			sumofbytes += sizeof(char);
+// 			if (args[i][j] == '\0') break;
+// 		}
+//     sumofbytes += len * sizeof(char);
+//     if (sumofbytes > ARG_MAX) return E2BIG;
+//   }
+//
+// 	/* Open the file. */
+// 	result = vfs_open(progname, O_RDONLY, 0, &v);
+// 	if (result) {
+// 		return result;
+// 	}
+//
+// 	/* We should be a new process. */
+// 	KASSERT(curproc_getas() == NULL);
+//
+// 	/* Create a new address space. */
+// 	as = as_create();
+// 	if (as ==NULL) {
+// 		vfs_close(v);
+// 		return ENOMEM;
+// 	}
+//
+// 	/* Switch to it and activate it. */
+// 	curproc_setas(as);
+// 	as_activate();
+//
+// 	/* Load the executable. */
+// 	result = load_elf(v, &entrypoint);
+// 	if (result) {
+// 		/* p_addrspace will go away when curproc is destroyed */
+// 		vfs_close(v);
+// 		return result;
+// 	}
+//
+// 	/* Done with the file now. */
+// 	vfs_close(v);
+//
+// 	/* Define the user stack in the address space */
+// 	result = as_define_stack(as, &stackptr);
+// 	if (result) {
+// 		/* p_addrspace will go away when curproc is destroyed */
+// 		return result;
+// 	}
+//
+// 	/* Copy arguments into user stack */
+//   char* argsptr[args_len];
+//   for (size_t j = 0; j < args_len-1; j++) {
+//     size_t i = args_len - 2 - j;
+//     size_t len = strlen(args[i]) + 1;
+//     stackptr -= ROUNDUP(len * sizeof(char), 8);
+//     argsptr[j] = (char*)stackptr;
+//     result = copyoutstr(args[i], (userptr_t)stackptr, PATH_MAX, &len);
+//     if (result) break;
+//   }
+//   if (result) {
+//     return result;
+//   }
+//     KASSERT(stackptr % 8 == 0);
+//   /* Copy argv into user stack */
+//   for (size_t i = 0; i < args_len; i++) {
+//     stackptr -= sizeof(char*);
+//     char *s;
+//     if (i == 0) {
+//       s = NULL;
+//     }
+//     else {
+//       s = argsptr[i-1];
+//     }
+//     result = copyout(&s, (userptr_t)stackptr, sizeof(char*));
+//     if (result) break;
+//   }
+//   if (result) {
+//     return result;
+//   }
+//
+// 	/* Warp to user mode. */
+// 	enter_new_process(args_len-1 /*argc*/, (userptr_t)stackptr /*userspace addr of argv*/,
+// 			  stackptr, entrypoint);
+//
+// 	/* enter_new_process does not return. */
+// 	panic("enter_new_process returned\n");
+// 	return EINVAL;
+// }
+// /**
+//  *
+//  *	================ END OF RUNPROGRAM WITH ARGUMENTS
+//  *
+//  */
+// #else
 int
 runprogram(char *progname)
 {
@@ -227,4 +227,4 @@ runprogram(char *progname)
 	panic("enter_new_process returned\n");
 	return EINVAL;
 }
-#endif
+// #endif
