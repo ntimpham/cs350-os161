@@ -50,32 +50,116 @@
 /*
  * Wrap rma_stealmem in a spinlock.
  */
+#if OPT_A3
+static struct spinlock coremap_lock = SPINLOCK_INITIALIZER;
+static bool vmbootstrap_completed = false;
+#endif
 static struct spinlock stealmem_lock = SPINLOCK_INITIALIZER;
+
+struct coremap_entry {
+	bool isvalid;
+	unsigned long numcontig;
+	paddr_t page_pa;
+	vaddr_t page_va;
+};
+
+static struct coremap_entry *coremap; // VA of first coremap entry (in array)
+static unsigned long coremap_npages; // Number of pages (size of coremap array)
+
 
 void
 vm_bootstrap(void)
 {
-	/* Do nothing. */
+#if OPT_A3
+	paddr_t lo, hi;
+	ram_getsize(&lo, &hi);
+
+	/* Calculate pages and coremap */
+	lo = ROUNDUP(lo, PAGE_SIZE);
+	coremap = (struct coremap_entry*) PADDR_TO_KVADDR(lo);
+	coremap_npages = hi / PAGE_SIZE;
+	unsigned long coremap_size = ROUNDUP(coremap_npages * sizeof(struct coremap_entry), PAGE_SIZE);
+	unsigned long coremap_size_npages = coremap_size / PAGE_SIZE;
+		KASSERT(coremap_size % PAGE_SIZE == 0);
+	/* Track pages starting after coremap */
+	coremap_npages -= (lo/PAGE_SIZE) + coremap_size_npages;
+	/* Initialize coremap entries */
+	for (unsigned long  i = 0; i < coremap_npages; i++) {
+		coremap[i].isvalid = false;
+		coremap[i].numcontig = 0;
+		coremap[i].page_pa = (lo+coremap_size) + (i*PAGE_SIZE);
+			KASSERT(coremap[i].page_pa % PAGE_SIZE == 0);
+			KASSERT(coremap[i].page_pa > lo);
+			KASSERT(coremap[i].page_pa < hi);
+		coremap[i].page_va = PADDR_TO_KVADDR(coremap[i].page_pa);
+	}
+	vmbootstrap_completed = true;
+#endif
 }
 
 static
 paddr_t
-getppages(unsigned long npages)
+getppages(unsigned long num_req)
 {
+#if OPT_A3
+	if (vmbootstrap_completed) {
+			KASSERT(num_req > 0);
+
+		spinlock_acquire(&coremap_lock);
+
+		unsigned long start = 0;
+		unsigned long counter = 0;
+		/* Scan for num_req contiguous invalid pages */
+		for (unsigned long i = 0; i < coremap_npages; i++) {
+			if (coremap[i].isvalid) {
+				start = i + 1;
+				counter = 0;
+			}
+			else counter++;
+
+			/* Found enough, allocate pages */
+			if (counter == num_req) {
+				for (unsigned long j = start; j < start+num_req; j++) {
+					coremap[j].isvalid = true;
+					coremap[j].numcontig = 0;
+				}
+				coremap[start].numcontig = num_req;
+				spinlock_release(&coremap_lock);
+				return coremap[start].page_pa;
+			}
+		}
+		/* Not enough free pages */
+		spinlock_release(&coremap_lock);
+		return 0;
+	}
+	else {
+		paddr_t addr;
+
+		spinlock_acquire(&stealmem_lock);
+
+		addr = ram_stealmem(num_req);
+
+		spinlock_release(&stealmem_lock);
+		return addr;
+	}
+
+#else
 	paddr_t addr;
 
 	spinlock_acquire(&stealmem_lock);
 
-	addr = ram_stealmem(npages);
+	addr = ram_stealmem(num_req);
 
 	spinlock_release(&stealmem_lock);
 	return addr;
+#endif
 }
 
 /* Allocate/free some kernel-space virtual pages */
 vaddr_t
 alloc_kpages(int npages)
 {
+						kprintf("\tAllocating pages: %d", npages);
 	paddr_t pa;
 	pa = getppages(npages);
 	if (pa==0) {
@@ -87,9 +171,28 @@ alloc_kpages(int npages)
 void
 free_kpages(vaddr_t addr)
 {
-	/* nothing - leak the memory. */
+#if OPT_A3
+	spinlock_acquire(&coremap_lock);
 
-	(void)addr;
+	/* Scan for page(s) */
+	for (unsigned long i = 0; i < coremap_npages; i++) {
+		/* Found */
+		if (coremap[i].page_va == addr) {
+				KASSERT(coremap[i].isvalid);
+				KASSERT(coremap[i].numcontig > 0);
+							kprintf("\tDeallocating pages: %lu", coremap[i].numcontig);
+			for (unsigned long j = 0; j < coremap[i].numcontig; j++) {
+				coremap[i+j].isvalid = false;
+				coremap[i+j].numcontig = 0;
+			}
+			spinlock_release(&coremap_lock);
+			return;
+		}
+	}
+	panic("Freed non-existent page\n");
+#else
+	(void) addr;
+#endif
 }
 
 void
@@ -221,6 +324,8 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	}
 	/* TLB is full, randomly replace an entry */
 	tlb_random(new_ehi, new_elo);
+	splx(spl);
+	return 0;
 
 #else
 	for (i=0; i<NUM_TLB; i++) {
@@ -237,10 +342,9 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	}
 
 	kprintf("dumbvm: Ran out of TLB entries - cannot handle page fault\n");
-#endif
-
 	splx(spl);
 	return EFAULT;
+#endif
 }
 
 struct addrspace *

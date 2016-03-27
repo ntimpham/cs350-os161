@@ -90,8 +90,6 @@ kill_curthread(vaddr_t epc, unsigned code, vaddr_t vaddr)
 		sig = SIGABRT;
 		break;
 	    case EX_MOD:
-		sig = SIGSEGV;
-		break;
 	    case EX_TLBL:
 	    case EX_TLBS:
 		sig = SIGSEGV;
