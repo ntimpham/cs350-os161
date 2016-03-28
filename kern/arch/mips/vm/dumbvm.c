@@ -318,7 +318,6 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		return 0;
 	}
 	/* TLB is full, randomly replace an entry */
-					kprintf("\nTLB FULL\n");
 	tlb_random(new_ehi, new_elo);
 	splx(spl);
 	return 0;
