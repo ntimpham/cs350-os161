@@ -159,7 +159,6 @@ getppages(unsigned long num_req)
 vaddr_t
 alloc_kpages(int npages)
 {
-						kprintf("\tAllocating pages: %d", npages);
 	paddr_t pa;
 	pa = getppages(npages);
 	if (pa==0) {
@@ -180,8 +179,8 @@ free_kpages(vaddr_t addr)
 		if (coremap[i].page_va == addr) {
 				KASSERT(coremap[i].isvalid);
 				KASSERT(coremap[i].numcontig > 0);
-							kprintf("\tDeallocating pages: %lu", coremap[i].numcontig);
-			for (unsigned long j = 0; j < coremap[i].numcontig; j++) {
+			const unsigned long NUMRESET = coremap[i].numcontig;
+			for (unsigned long j = 0; j < NUMRESET; j++) {
 				coremap[i+j].isvalid = false;
 				coremap[i+j].numcontig = 0;
 			}
@@ -299,7 +298,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	uint32_t new_ehi = faultaddress;
 	uint32_t new_elo = paddr | TLBLO_DIRTY | TLBLO_VALID;
 
-	if ((vbase1 <= faultaddress && vtop1 >= faultaddress)
+	if ((vbase1 <= faultaddress && vtop1 > faultaddress)
 			&& as->as_loadelfdone) {
 		new_elo &= ~TLBLO_DIRTY;
 	}
@@ -307,13 +306,9 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	for (i = 0; i < NUM_TLB; i++) {
 		tlb_read(&ehi, &elo, i);
 		/* Entry for faultaddress already exists, use it */
-		if (ehi == new_ehi) {
-			tlb_write(new_ehi, new_elo, i);
-			splx(spl);
-			return 0;
-		}
+		if (ehi == new_ehi);
 		/* Entry is valid and cannot be used */
-		if (elo & TLBLO_VALID) {
+		else if (elo & TLBLO_VALID) {
 			continue;
 		}
 		/* Entry is useable, write here */
@@ -323,6 +318,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		return 0;
 	}
 	/* TLB is full, randomly replace an entry */
+					kprintf("\nTLB FULL\n");
 	tlb_random(new_ehi, new_elo);
 	splx(spl);
 	return 0;
@@ -341,7 +337,6 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		return 0;
 	}
 
-	kprintf("dumbvm: Ran out of TLB entries - cannot handle page fault\n");
 	splx(spl);
 	return EFAULT;
 #endif
@@ -373,6 +368,11 @@ as_create(void)
 void
 as_destroy(struct addrspace *as)
 {
+#if OPT_A3
+	free_kpages(PADDR_TO_KVADDR(as->as_pbase1));
+	free_kpages(PADDR_TO_KVADDR(as->as_pbase2));
+	free_kpages(PADDR_TO_KVADDR(as->as_stackpbase));
+#endif
 	kfree(as);
 }
 
